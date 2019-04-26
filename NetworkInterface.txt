@@ -179,8 +179,42 @@ The NI can be configured by changing these variables:
      one for loop iterates over inNode_ptr, if there are messages present: call scheduleEvent. 
      another loop iterates over all vc's : if any flit buffer is ready in the next cycle: call 
      scheduleEvent
+     
+     Till now, concern was getting message packet from protocol message buffer and injecting to router
+     Now, how does router give flits to NI and how directory consumes it? 
 
-     7. 
+     7.Method: checkStallQueue() // 
+     A dummy variable tracks if a message is enqueued this cycle. 'messageEnqueuedThisCycle'
+     Idea is to check if there are any pending flits which needs to be consumed. These pending 
+     flits are stored in m_stall_queue. 
+     a) check if m_stall_queue is empty.. if not goto (b) else return
+     b) a for loop iterates over all flits stored in m_stall_queue
+     c) outNode_ptr for that vnet is checked for available slots.. if avialable, enqueue the flit;
+     send back a credit with free signal that the VC is no longer stalled. 
+     return messageEnqueuedThisCycle as true. 
+
+     8.The NI is connected to router via inNetLink which was setup when setting inPort of NI. 
+     This is the incoming flit link. 
+
+     a) check if the incoming flit link is ready
+     b) dequeue the flit from the link
+     c) find meta-data like vnet and set_dequeue_time of this flit. 
+     d) if tail/head_tail flit is received, and if message is not enqueued this cycle and outNode_ptr
+     has free Message buffers for above vnet, the flit is enqueued ; sendCredit. 
+     e) if no slots are available : insert this flit into m_stall_queue and increase the m_stall_count
+     for above vnet. 
+     f) if it is a head/body flit : send back a credit but not VC free signal. 
+     
+     For the outgoing flits from NI to router, there needs to be a credit management system. 
+     So, we check the incoming credit link 'inCreditLink'
+     a) is inCreditLink ready? 
+     b) get the credit 
+     c) increment_credit() of corresponding VC buffer by m_out_vc_state -> increment_credit()
+     d) if the credit is a free signal, set state of this VC as IDLE_ 
+     
+     9. ADD details about how credit system works, how sendCredit method works, how OutVcState works! 
+
+
 
 
 
