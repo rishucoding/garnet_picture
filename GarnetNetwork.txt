@@ -1,0 +1,160 @@
+Garnet extends ruby memory system which contains parent classes for 
+Topology and routing. 
+
+GarnetNetwork class instantiates the main network components: network 
+interfaces (NIs), routers,network links and credit links.
+
+Garnet_standalone cache coherence protocol has 3 types of messages for trans
+-action: 
+> data write (response) .. goes to VNET2
+> data read (request) .. goes to VNET0
+> instruction fetch (request) .. goes to VNET1
+
+modelled network allows configuration of: 
+  num_rows
+  -----
+  NOTE: Due to ruby’s memory address range implementation, the number of
+        directory controllers in a topology is limited to powers of two. 
+  -----
+
+
+
+  routing_algorithm // it is enum, 1 means  XY routing for mesh topology. 
+  -----
+  NOTE: Will always take the shortest path. Forces a flit to always take an
+        x-direction path firstly and a y-direction secondly. 
+  -----
+  
+  m_vnet_type // a vector of VNET_type(CTRL_VNET_, DATA_VNET_)
+  
+  m_routers is a vector of (pointer to Router class). This describes all the
+  routers in the network. 
+
+
+Stepwise description of code: 
+
+1. setting vnet_type based on 'request' or 'response'. m_vnet_type_names is 
+   defined in Network.hh .. is is just a string to categorize. 
+   The variable m_vnet_type is not used later in this class. 
+
+2. for (vector<BasicRouter*>::const_iterator i =  p->routers.begin();
+         i != p->routers.end(); ++i) { }
+   // this for loop creates an iterator i which is a pointer to BasicRouter
+   class. i goes to every index in vector routers (defined in other class).
+   This pointer to  basic router 'i'  is safe_cast to a pointer to Router 
+   of garnet2.0 model(router is a temporary pointer here). Then, this 
+   (pointer to router) is appened via push_back to vector m_routers.
+
+   router->init_net_ptr(this); // passes the GarnetNetwork pointer to the 
+   router, so every router knows 'I am part of the same network'
+
+3. for (vector<ClockedObject*>::const_iterator i = p->netifs.begin();
+         i != p->netifs.end(); ++i) { }
+   
+   //this for loop creates an iterator i which is a pointer to ClockedObject
+   class. i goes to every index in vector netifs(defined in other class). 
+   This pointer is safe_cast to a pointer to NetworkInterface class (ni
+   is a dummy pointer here). then, this (pointer to NetworkInterface) 
+   is appended via push_back to m_nis. 
+   This is exactly similar to router.
+
+-----
+NOTE: above 3 steps happen in the constructor of GarnetNetwork
+-----
+
+
+Creating a method init in GarnetNetwork class. 
+This first calls the parent class init. (inheritance)
+
+4. A node is a controller (directory or  Garnet_standalone cache coherence protocol controller)
+   This node is connected to NI which is responsible for converting messages to flits. 
+   NI is always connected to two things: 
+    > injecting side : router or CC (toNetQueues)
+    > ejecting side: router or directory (fromNetQueues)
+  -----
+  NOTE: types are as follows: 
+        std::vector<std::vector<MessageBuffer *>> Network::m_toNetQueues
+        std::vector<std::vector<MessageBuffer *>> Network::m_fromNetQueues
+        
+        Both are vector of (vector of pointer of MessageBuffer)
+  -----
+
+  A NI is connected only one sided to message buffer (injection or ejection side) 
+  m_toNetQueues maps to inNode_ptr which is input message buffer. These messages are taken 
+  and converted to flits
+
+  m_fromNetQueues maps to outNode_ptr which is output message buffer. The flits are converted
+  back to messages and this buffer is dequeued by the directory. 
+
+  Total number of nodes is same as total number of NI. So #NI = 2 * (#tiles)
+  where each tile consists of one directory, one CC controller, one core, 2 NI, one router.
+
+5. m_topology_ptr->createLinks(this);
+   GarnetNetwork class calls the Topology class which defines the routers, internal links 
+   and external links. 
+   Internal links are constructed unidirectionally and external links are constructed bidirectionally. 
+
+   Then topology specific parameters are initialized: m_num_rows, m_num_cols
+
+6. A fault model is declared to each router (// ADD MORE DETAILS HERE) 
+
+init method ends
+
+7. destructor for GarnetNetwork is created which can delete pointers of m_routers, m_nis,
+   m_networklinks, m_creditlinks. 
+
+8. Method: 
+   void GarnetNetwork::makeExtInLink(NodeID src, SwitchID dest, BasicLink* link,
+                            const NetDest& routing_table_entry) {   }
+   
+ /*  This function creates a link from the Network Interface (NI)
+ * into the Network(Router).
+ * It creates a Network Link from the NI to a Router and a Credit Link from
+ * the Router to the NI
+ */
+   The pointer to BasicLink is safe_cast to a pointer to GarnetExtLink, here a dummy pointer
+   is created garnet_link. 
+   GarnetExtLink has two pointers of NetworkLink and CreditLink : m_network_links[2] and m_credit_links[2]
+   So, from garnet_link, we extract network_link and credit_link, append into vectors m_networklinks
+   and m_creditlinks. 
+
+   These network link and credit link is passed in the router and NI. The direction of network 
+   link is from NI to router (EXT_IN_) and direction of credit link is from router to NI. 
+   
+   For the router, whenever a input port is added, one need to specify the direction of port. 
+   Generally, there are 5 ports for a router : N , S , E , W , Local. The local one connects NI 
+   and router. 
+
+   we choose router of (id : dest) and choose ni of (id: src) and make the connection 
+   by calling their addInPort and addOutPort methods. 
+
+9. Method: 
+   void GarnetNetwork::makeExtOutLink(SwitchID src, NodeID dest, BasicLink* link,
+                             const NetDest& routing_table_entry) { } 
+   
+
+  /*
+  * This function creates a link from the Network to a NI.
+  * It creates a Network Link from a Router to the NI and
+  * a Credit Link from NI to the Router
+  */
+
+  It is defined similar to 8. 
+
+10. Method: 
+    void GarnetNetwork::makeInternalLink(SwitchID src, SwitchID dest, BasicLink* link,
+                                const NetDest& routing_table_entry,
+                                PortDirection src_outport_dirn,
+                                PortDirection dst_inport_dirn) { }
+
+    
+/*
+ * This function creates an internal network link between two routers.
+ * It adds both the network link and an opposite credit link.
+*/
+  
+
+   Here, src router calls its 'addOutPort' and established an output port by passing the net_link, 
+   port ka direction, credit_link. Similarly, dest router calls its 'addInPort' method. 
+
+11. Simple methods are created to find router_id for a NI, router size and collect stats. 

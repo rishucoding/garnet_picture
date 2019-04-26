@@ -1,0 +1,37 @@
+Network links can be of two types: 
+
+1. external link: is used to connect a router to a network interface. there 
+can be many network interfaces, each NI serving one kind of controller
+(like cache coherence protocol controller, directory, DMA) 
+  EXT_IN_ : unidirectional from NI to router
+  EXT_OUT_: unidirectional from router to NI 
+
+
+2. internal link: is used to connect a router to a router. 
+  INT_: between routers (unidirectional) 
+-----
+NOTE: one must clearly understand how the code is implementing the figure
+of a tiled NoC: 
+  > how the link from router to NI is established
+  > how the link from NI to router is established
+  > how the credit link for VC and buffer mgmt is established
+  > how the link each router creates.
+-----
+Purpose of links: these carry flits.
+
+For the sake of Garnet_standalone cache coherence dummy protocol: we have 
+two kinds of messages. 
+  1. control protocol message: size is 1 flit. 
+  2. data messages: size is 5 flit
+
+
+
+Capacity of link is defined by (bits carried) / cycle. 
+
+These are also credit link to manage flow control of flits travelling from 
+one VC to another VC. 
+> credit link carries VC buffer credits
+
+NOTE: latency is defined for links(internal and external) and router. 
+
+

@@ -1,0 +1,187 @@
+Every network interface is connected to one controller on one end and router on the other end. 
+
+  CASE1 : connected to CC controller: It flitisizes the protocol buffer messages into flits and 
+          passed to router via Local input port. 
+  
+  CASE2 : connected to directory: The flits are converted back to messages, and flits are consumed 
+          by the directory. 
+
+"""
+I guess one tile has only one NI. Both the directory and CC controller are connected to the same
+NI. This way, when addNode method is called in NetworkInterface class, the directory is MessageBuffer
+for outNode_ptr for consuming the flits and CC controller is the MessageBuffer for inNode_ptr 
+  for injecting the messages which gets converted into flits. 
+For every node, which is injecting messages into the NI... we go to every one of them and set that
+these messages ka consumer is NI.. as these messages are going to be injected to NI. 
+"""
+
+The NI can be configured by changing these variables: 
+
+  m_id // id of NI 
+  m_virtual_networks // total number of vnets
+  m_vc_per_vnet // total number of VCs per VNEtwork
+  m_num_vcs // total number of virtual channels = m_virtual_networks * m_vc_per_vnet
+  m_deadlock_threshold, vc_busy_counter //
+  -----
+  NOTE: For deadlock detection: 
+  A high recorded latency value is congruent with a high vc_busy_counter value, which is recorded for
+  each virtual network for each router. The vc_busy_counter is reset when any output VC resides in
+  the idle state for one cycle. If any vc_busy_counter reaches the predefined deadlock threshold, the
+  simulation is aborted. By default, the deadlock threshold is set to 50,000. This means that if any
+  vc_busy_counter reaches 50,000, a deadlock is detected and the simulation is aborted. However, it
+  is possible that the system is not in deadlock, but in livelock. In this case, flits keep moving 
+  along the virtual network, without reaching their destination.
+  -----
+  
+  m_ni_out_vcs // these flit buffers store the flitisized flits, and inject to input unit of router.
+
+1. Constructor: 
+   m_ni_out_vcs.resize(m_num_vcs); // based on number of VCs, create that many flit buffers.
+   m_ni_out_vcs_enqueue_time.resize(m_num_vcs); // for the above flit buffers, store the enque time
+   outCreditQueue = new flitBuffer(); // this flit buffer is used to manage credits when transferring
+                                      flits from router to NI
+   Instantiate the NI flit buffers for each VC with Cycles infinite. During m_ni_out_vcs flit buffer
+   selection, lowest enqueue_time is selected, so we set highest value. 
+
+   m_vc_allocator// vector of size m_virtual_networks, keeps track of number of VC allocated per vnet
+
+
+2. Method::init(): 
+   m_out_vc_state is a (vector of pointer to OutVcState) 
+   iterate to all VCs, initialize the state as IDLE_. This function is used __
+
+
+3. Destructor for NetworkInterface class. 
+
+4. Method: addInPort(NetworkLink *in_link,CreditLink *credit_link)
+   This method is used to create the input port of NI. NI can recieve input from router using 
+   a network link. When setting up EXT_OUT_ link, NI recieves input from the router. 
+
+5. Method: addOutPortNetworkLink *out_link, CreditLink *credit_link, SwitchID router_id)
+   This method is used to create the output port of NI. NI can send flits to the router using a net
+   work link. When setting up EXT_IN_ link, NI sends flits to the router and recieves credit using
+   credit link. 
+
+6 . Method: addNode() {} .. this method is used to add nodes to a NI. 
+
+7.  Method: dequeueCallback()
+    An output MessageBuffer (directory side.. ) has dequeued something this cycle and there is now 
+    space to enqueue a stalled message. However, we cannot wake on this dequeue cycle. So, we schedule 
+    a wakeup at the next cycle. 
+
+8.  Method: wakeup()
+    1. The NI wakeup checks whether there are any ready messages in the CC protocol buffer. If yes, 
+    it picks up , flitisizes it into a number of flits and puts it into an output buffer and sche
+    duels the output link. On a wakeup it also checks whether there are flits in the input link. If yes, 
+    it picks them up and if the flit is tail, the NI inserts the corresponding message into the proto
+    col buffer and also checks for the credits being sent by the router
+
+    curCycle() : returns the value of current cycle. 
+    MsgPtr msg_ptr; // create a dummy variable
+
+    inNode_ptr is a pointer to an array of message buffers for a NI
+    NOTE - each inNode_ptr message buffer maps to one vnet (size of array being no. of message class)
+    This means, for Garnet_standalone: we have three message buffers for inNode_ptr
+
+    2. for (int vnet = 0; vnet < inNode_ptr.size(); ++vnet) {...}
+     > This for loop iterates over ALL virtual networks and converts ready messages into flits.
+     > store the pointer to message buffer in a dummy variable
+     > check if message buffer empty
+     > if not empty: check if message is ready and grab the message 
+     > pass the pointer to function 'flitisizeMessage(msg_ptr, vnet)'
+     This function will convert message to flits and insert them to another buffer
+     > dequeue the protocol message buffer
+
+    3. Method: flitisizeMessage(msg_ptr, vnet): 
+     > Network Destination of the msg_ptr is found  and all the destinations associated with this 
+     message are stored in 'dest_nodes'
+     > number of flits is dependent on link bandwidth available. 
+     > link bandwitdh is expressed in terms of bytes/cycle or flit size. 
+     > size of flit is in Bytes
+     > num_flits // number of flits is calculated for msg_ptr
+     > a loop is run to convert all multicast messages to unicast messages. This loop goes to each
+     destID of dest_nodes. It has one specific if condition which checks for unicast or multicast. 
+     > Method: calculateVC(vnet) is called which returns the free VC for given vnet
+     > I don't need to worry about multicast as of now.. maybe later. 
+     > a dummy variable 'route' of type RouteInfo (struct) is created: which stores important info
+     like "vnet: flits belong to which vnet? ", "net_dest: final network dest? ", " src_ni: which 
+     core/NI injected this flit? ", "src_router: which router injected this flit into network?", 
+     "dest_ni: NI id of destination NI? ", "dest_router: id of destination router"
+
+     > since the message packet is getting flitisized here, no hops are there.. so initialize with -1
+     > A for loop is used to iterate over num_flits, a dummy flit fl is created by passing important
+     info like route, vnet, vc into constructor of flit class.
+     -----
+     NOTE: there is a delay between message (enqueued in inNode_ptr) and (message converted into flits)
+           this is set_src_delay of a flit
+     -----
+     
+     > then these flits are inserted into m_ni_out_vcs
+     
+     -----
+     NOTE: three vectors are associated with this flit buffer, one for storing the flits, one for 
+     storing information about enqueue_time and last one for storing the vc_state. they are: 
+     m_ni_out_vcs_enqueue, m_out_vc_state, m_ni_out_vcs. all these vectors are indexed by VC value.
+     -----
+
+     -----
+     NOTE: this method returns false if for the given vnet, no free VC is found, else it returns true.
+     -----
+
+     4. Method: calculateVC(vnet)
+     This method returns a free output virtual channel.
+     A for loop iterates over all vc's in that vnet, starting from base VC.
+     delta is a dummy variable which stores the offset of free VC. The variable m_vc_allocator[vnet]
+     stores the occupied VCs for a vnet. So, when all VC's are free : 0 is stored; and so delta will
+     be 0. It makes sense to add 0 to the base VC as base VC is itself free. 
+
+     The id of VC is determined by [(vnet*m_vc_per_vnet) + delta], then we check if the VC is really
+     IDLE, if it is then the id is returned. 
+     
+     Also, a vc_busy_counter is present which is vector indexed at vnet. 
+     If all the VC are occupied, then increated the vc_busy_counter. A deadlock error occurs
+     if this counter value exceeds deadlock threshold. Note that the counter value increases only
+     when the complete vnet is occupied. So, a continues increase of the counter value means that 
+     the VC are not getting freed.. that means they are not finding a free buffer after them to tra
+     nsfer the flits there. This is a case of severe congestion. 
+
+     5. Method: scheduleOutputLink() // this is called after flitisizing the message as m_vc_out_vcs
+     buffer may have flits which can be consumed by the router.
+     
+      for (int i = 0; i < m_num_vcs; i++) {} 
+      This for loop iterates over all VC's present in m_ni_out_vcs. 
+      Before sending flits to the next buffer, the m_ni_out_vcs flit buffer should be ready + there
+      should be space in the downstream flit buffer. 
+      We check this by: if (m_ni_out_vcs[vc]->isReady(curCycle()) && m_out_vc_state[vc]->has_credit())
+      
+      It is to be ensured that the flit buffer which got enqueued first should be dequeued first... 
+      this way point to point ordering is ensured. 
+      How to do this in code? 
+      a) check if vnet is ordered
+      b) iterate over other VC's for chosen VNET.
+      c) check if other VC's have flits enqueued before the chosen vc .. if so.. then is_candidate_vc
+      is false. 
+      d) if above vc has 'is_candidate_vc == true' , then a dummy variable m_vc_round_robin stores it.
+      e) credit is decremented for this vc in m_out_vc_state, flit is dequeued and inserted to 
+        OutFlitQueue
+      f) outNetLink->scheduleEventAbsolute(clockEdge(Cycles(1)));
+      This schedules the flit, and from here the flit moves to router input unit. 
+
+      -----
+      NOTE: outFlitQueue is a single flitBuffer and it is the sourceQueue for out_link which connects
+      NI to router.
+      -----
+
+     6.Method: checkReschedule()
+     This method is responsible to wakeup NI in the next cycle if there are waiting messages in the 
+     protocol buffer, or waiting flits in the output VC buffer.
+
+     one for loop iterates over inNode_ptr, if there are messages present: call scheduleEvent. 
+     another loop iterates over all vc's : if any flit buffer is ready in the next cycle: call 
+     scheduleEvent
+
+     7. 
+
+
+
+
