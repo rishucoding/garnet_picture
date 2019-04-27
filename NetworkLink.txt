@@ -1,17 +1,17 @@
-Network links can be of two types: 
+Network links can be of two types:
 
-1. external link: is used to connect a router to a network interface. there 
+1. external link: is used to connect a router to a network interface. there
 can be many network interfaces, each NI serving one kind of controller
-(like cache coherence protocol controller, directory, DMA) 
+(like cache coherence protocol controller, directory, DMA)
   EXT_IN_ : unidirectional from NI to router
-  EXT_OUT_: unidirectional from router to NI 
+  EXT_OUT_: unidirectional from router to NI
 
 
-2. internal link: is used to connect a router to a router. 
-  INT_: between routers (unidirectional) 
+2. internal link: is used to connect a router to a router.
+  INT_: between routers (unidirectional)
 -----
 NOTE: one must clearly understand how the code is implementing the figure
-of a tiled NoC: 
+of a tiled NoC:
   > how the link from router to NI is established
   > how the link from NI to router is established
   > how the credit link for VC and buffer mgmt is established
@@ -19,19 +19,40 @@ of a tiled NoC:
 -----
 Purpose of links: these carry flits.
 
-For the sake of Garnet_standalone cache coherence dummy protocol: we have 
-two kinds of messages. 
-  1. control protocol message: size is 1 flit. 
+For the sake of Garnet_standalone cache coherence dummy protocol: we have
+two kinds of messages.
+  1. control protocol message: size is 1 flit.
   2. data messages: size is 5 flit
 
 
 
-Capacity of link is defined by (bits carried) / cycle. 
+Capacity of link is defined by (bits carried) / cycle.
 
-These are also credit link to manage flow control of flits travelling from 
-one VC to another VC. 
+These are also credit link to manage flow control of flits travelling from
+one VC to another VC.
 > credit link carries VC buffer credits
 
-NOTE: latency is defined for links(internal and external) and router. 
+NOTE: latency is defined for links(internal and external) and router.
 
+3. NI has two links for flit movement: inNetLink for input port of NI ; outNetLink for output port
+   of NI. The inNetLink transfers flits from router to NI. The outNetLink transfers flits from NI to
+   router.
 
+4. The code starts with constructor: initializing m_type, m_latency, linkBuffer, link_consumer,
+   link_srcQueue, m_vc_load
+   m_vc_load is a vector of size #VCs
+
+5. Method: setLinkConsumer sets the consumer of the link.. from where dequeue of flits will happen.
+
+6. Method: setSourceQueue: sets the source of flits for the linkBuffer of NetworkLink.
+
+7. Method: wakeup()
+   This method dequeues the link_srcQueue.. gets the flits from there and inserts them to linkBuffer.
+   Then, it triggers the link_consumer to become active after m_latency delay .. so that the
+   flits can be dequeued after link delay. A counter is set to monitor link utilization: m_link_utilized
+   m_vc_load counts the number of flits transferred for a VC.
+
+   The consumer of the link (NI/router) is put in the global event queue with a timestamp set after
+   m_latency cycles.The eventqueue calls the wakeup function in the consumer.
+
+8. Methods are available to create a NetworkLink, CreditLink

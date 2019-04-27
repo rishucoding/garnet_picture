@@ -1,30 +1,30 @@
 The Router class houses one routing unit, switch allocator, crossbar switch, and for each one port
-input and output unit. 
+input and output unit.
 
-Router stages are performend by the router in order. 
+Router stages are performend by the router in order.
 
 BW -> RC -> VA -> SA -> BR -> ST -> LT
 
-1. BW: the input unit buffers the incoming flits in its VC. 
+1. BW: the input unit buffers the incoming flits in its VC.
 2. RC: the routing unit computes the output port for the buffered flits
-3. VC allocation: the VC  allocator arbitrates the input ports by selecting a VC from each input 
-   port, in a round robin manner.( so for each input port, selection of VC -> a winning VC is chosen) 
+3. VC allocation: the VC  allocator arbitrates the input ports by selecting a VC from each input
+   port, in a round robin manner.( so for each input port, selection of VC -> a winning VC is chosen)
 4. SA : the switch allocator arbitrates the output ports by selecting one input VC as the winner
-   for each output port, in a round robin manner. 
-5. BR: the flits that won SA are pulled their respective input units. 
+   for each output port, in a round robin manner.
+5. BR: the flits that won SA are pulled their respective input units.
 6. ST: flits that won SA traverse the crossbar switch
-7. LT: flits traverse links from the output unit to their target routers. 
+7. LT: flits traverse links from the output unit to their target routers.
 
 -----
-NOTE: By default: all stages except link traversal are performed in one cycle. Link traversal occurs in 
-      next cycle. 
+NOTE: By default: all stages except link traversal are performed in one cycle. Link traversal occurs in
+      next cycle.
 -----
 
-Route Compute is only done for HEAD / HEAD_TAIL flits, update route in VC. 
+Route Compute is only done for HEAD / HEAD_TAIL flits, update route in VC.
 
-Once the input unit VC is full, we mark VC valid for VC allocation. 
+Once the input unit VC is full, we mark VC valid for VC allocation.
 
-SwitchAllocator does both VC arbitration and input port selection. 
-    SA-i / SA-I : loops through all input VCs at every input port and selects one in round robin manner. 
+SwitchAllocator does both VC arbitration and input port selection.
+    SA-i / SA-I : loops through all input VCs at every input port and selects one in round robin manner.
 
 // ADD MORE DETAILS
