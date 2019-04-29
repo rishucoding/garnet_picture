@@ -1,0 +1,105 @@
+1. SwitchAllocator performs VC arbitration and selection within it.
+  Two things here:
+    For a output port: which input port will pass the flits and for that input port: which VC will
+    pass the flits. So aribtration of input port and arbitration of VC's.
+
+2. Method: init()
+    m_input_unit // all input ports of router
+    m_output_unit // all output ports of router
+
+    m_num_inports // total input ports
+    m_num_outports // total output ports
+
+    m_round_robin_inport // for a particular output port, stores scheduled input port
+    m_round_robin_invc // for a particular input port, stores scheduled VC
+
+    A for loop to initialize VC 0 as default for scheduling in m_round_robin_invc
+
+    A for loop to initialize port_requests false, and initialize port 0 for scheduling in
+    m_round_robin_inport
+
+
+
+3. Method: wakeup()
+   /*
+   * The wakeup function of the SwitchAllocator performs a 2-stage
+   * seperable switch allocation. At the end of the 2nd stage, a free
+   * output VC is assigned to the winning flits of each output port.
+   * There is no separate VCAllocator stage like the one in garnet1.0.
+   * At the end of this function, the router is rescheduled to wakeup
+   * next cycle for peforming SA for any flits ready next cycle.
+   */
+
+   Does two things: arbitrate_inports() // first stage of allocation (VC selection)
+   arbitrate_outports() // second stage of allocation (SA or input port selection)
+
+4.  Method: arbitrate_inports() // First stage of allocation
+    // Select a VC from each input in a round robin manner
+    // Independent arbiter at each input port
+    /*
+    * SA-I (or SA-i) loops through all input VCs at every input port,
+    * and selects one in a round robin manner.
+    *    - For HEAD/HEAD_TAIL flits only selects an input VC whose output port
+    *     has at least one free output VC.
+    *    - For BODY/TAIL flits, only selects an input VC that has credits
+    *      in its output VC.
+    * Places a request for the output port from this input VC.
+    */
+
+    a) for (int inport = 0; inport < m_num_inports; inport++) {}
+       loop through all input ports
+       A dummy variable 'invc' InputVC
+
+    b) for (int invc_iter = 0; invc_iter < m_num_vcs; invc_iter++){}
+       loop through all VC's of a input port
+
+    c) check if the flit is in SA_ stage
+
+    d) find 'outport' and 'outvc' for given 'invc'
+
+    e) check if the flit in this inputVc is allowed to be sent.
+
+    f) if allowed: increase the counter of m_input_arbiter_activity, set m_port_request as true,
+       and set this as winner VC.
+
+    g)  for the next iteration of this input port, set the just next VC (invc + 1) as
+        m_round_robin_invc. Basically: going to each VC a port in round robin manner.
+
+5.  Method: get_outport(invc)
+    Method: get_outvc(invc)
+    Method: send_allowed(inport, invc, outport, outvc)
+
+
+
+
+
+
+
+
+
+
+
+
+
+TODO:1)  m_port_requests // vector of vector, for a index stores number of ouptut port requests
+Looks like:
+            1   2   3   4   5
+
+          1 -
+
+          2     -           -
+
+          3     -       -
+
+          4                 -
+
+          5             -
+
+Here, on the x axis we index to an output port.
+After choosing an output port, choose index port on the y axis.
+The ' - ' indicates a True value.
+for eg: for output port (2) : input port (2) and (3) has raised a request to insert flit.
+
+TODO: m_vc_winners
+
+TODO: m_input_arbiter_activity
