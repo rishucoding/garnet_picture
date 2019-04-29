@@ -1,0 +1,35 @@
+1. The InputUnit models the input port of a router. The input unit is connected to inNetLink where
+   it consumes the flit; outCreditLink where the credits are passed for incoming flits. The flits
+   are stored in VC.
+
+
+2.  PortDirection : North, West, South, East, Local
+
+3.  Constructor: Every port has a id which denotes the port number.
+    Two dummy variable:
+        m_num_buffer_reads
+        m_num_buffer_writes
+        These are of size #VNETs, they are initialized to zero.
+    creditQueue // stores the credit count for incoming flits
+    a total of (m_num_vcs) VC are instantiated.
+
+4.  Method: wakeup()
+
+    /*
+    * The InputUnit wakeup function reads the input flit from its input link.
+    * Each flit arrives with an input VC.
+    * For HEAD/HEAD_TAIL flits, performs route computation,
+    * and updates route in the input VC.
+    * The flit is buffered for (m_latency - 1) cycles in the input VC
+    * and marked as valid for SwitchAllocation starting that cycle.
+    *
+    */
+
+    a) create a dummy flit
+    b) check if m_in_link is ready
+    c) get the flit by consuming the m_in_link
+    d) get the vc of flit.
+    e) increment_hops now, as flit has traversed the link
+    f) if the flit is a head or head_tail :
+        > sanity check that corresponding VC is idle.
+        >
