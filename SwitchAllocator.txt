@@ -7,8 +7,8 @@
     m_input_unit // all input ports of router
     m_output_unit // all output ports of router
 
-    m_num_inports // total input ports
-    m_num_outports // total output ports
+    m_num_inports // total input ports (4 = N ; S ; E ; W)
+    m_num_outports // total output ports (4 = N ; S ;E ; W)
 
     m_round_robin_inport // for a particular output port, stores scheduled input port
     m_round_robin_invc // for a particular input port, stores scheduled VC
@@ -53,17 +53,62 @@
     b) for (int invc_iter = 0; invc_iter < m_num_vcs; invc_iter++){}
        loop through all VC's of a input port
 
-    c) check if the flit is in SA_ stage
+    c) check if the flit is in SA_ stage for VC invc. Check if this VC needs stage SA at
+    present cycle. If not, go to next VC until all VC's are covered.
+
+    -----
+    NOTE: Method need_stage(invc, SA_, curTick()) of input unit
+    1) every SA unit creates  instances of input unit
+    2) every input unit creates instances of VC
+    3) this method calls need_stage(stage, time) of corresponding VC
+      > checks if the VC is ready?
+      > VC_state stores information in the form of pair.
+      > call is_stage method for top_flit of this buffer.
+    In summary, this method checks if the flit is in SA_ stage and time is greater than the time
+    when flit was enqueued.
+
+    -----
 
     d) find 'outport' and 'outvc' for given 'invc'
 
+    -----
+    NOTE: Method m_input_unit[inport]->get_outport(invc)
+                 m_input_unit[inport]->get_outvc(invc)
+
+    1) input unit calls get_outport method for that particular vc.
+
+    2) input unit calls get_outvc method for that particular vc.
+    -----
+
+
     e) check if the flit in this inputVc is allowed to be sent.
+    -----
+    NOTE: method send_allowed(inport, invc, outport, outvc)
+    // This method checks on flit basis
+    //check if outvc needed
+    // check if credit needed for multi-flit packet
+    // check if ordering violated.
+    1) if has_outvc is false, this means outvc needed. This is only true H / H_T flits as
+       these haven't been assigned an outvc. (Check how outvc calculation is done? )
+
+    2) check if corresponding outport has free vc  for that vnet ?
+
+    3) if not (1), check for credits in outvc?
+
+    4) if no outvc or no credit available, return false. This means, the flits of this VC can't
+       progress to output port for this cycle.
+
+    5) for the same vnet if any other VC was enqueued before the flits of this VC, give chance
+       to them.
+    -----
 
     f) if allowed: increase the counter of m_input_arbiter_activity, set m_port_request as true,
-       and set this as winner VC.
+       and set this as winner VC. Also set m_round_robin_invc to next VC value as round robin
+       goes in order. So, a VC is selected for this input port. Next: break the loop to next
+       input port
 
-    g)  for the next iteration of this input port, set the just next VC (invc + 1) as
-        m_round_robin_invc. Basically: going to each VC a port in round robin manner.
+    g)  if not (f) for the next iteration of this input port, repeat from (b) to find winning
+       VC for this port.
 
 5.  Method: get_outport(invc)
     Method: get_outvc(invc)
